@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 
 const VOTING_ABI = [
@@ -27,7 +27,6 @@ function App() {
   const [transferAddress, setTransferAddress] = useState({})
   const [loading, setLoading] = useState(false)
   const [notification, setNotification] = useState(null)
-  const loadProposalsTimeoutRef = useRef(null) // 🔥 Debouncing용
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type })
@@ -120,51 +119,43 @@ function App() {
     }
   }
 
-  // 🔥 Debounced loadProposals - 5초 안에 여러 번 호출되면 마지막 것만 실행
+  // 제안 목록 불러오기
   const loadProposals = async (contractInstance = contract) => {
-    // 이전 타이머 취소
-    if (loadProposalsTimeoutRef.current) {
-      clearTimeout(loadProposalsTimeoutRef.current)
-    }
+    if (!contractInstance && !readContract) return
+    
+    const activeContract = contractInstance || readContract
 
-    // 2초 후에 실행 (2초 안에 또 호출되면 다시 리셋)
-    loadProposalsTimeoutRef.current = setTimeout(async () => {
-      if (!contractInstance && !readContract) return
-      
-      const activeContract = contractInstance || readContract
+    try {
+      setLoading(true)
+      console.log('📊 제안 데이터 로드 중...')
+      const count = await activeContract.proposalCount()
+      const proposalList = []
 
-      try {
-        setLoading(true)
-        console.log('📊 제안 데이터 로드 중...')
-        const count = await activeContract.proposalCount()
-        const proposalList = []
-
-        for (let i = 0; i < count; i++) {
-          const [description, creator, isActive, createdAt, hasVoted] = await activeContract.getProposal(i)
-          const [optionNames, voteCounts] = await activeContract.getOptions(i)
-          
-          proposalList.push({
-            id: i,
-            description,
-            creator,
-            isActive,
-            createdAt: Number(createdAt),
-            hasVoted,
-            options: optionNames.map((name, idx) => ({
-              name,
-              voteCount: Number(voteCounts[idx])
-            }))
-          })
-        }
-
-        setProposals(proposalList)
-        console.log('✅ 제안 데이터 로드 완료')
-      } catch (error) {
-        console.error('❌ 제안 로드 오류:', error)
-      } finally {
-        setLoading(false)
+      for (let i = 0; i < count; i++) {
+        const [description, creator, isActive, createdAt, hasVoted] = await activeContract.getProposal(i)
+        const [optionNames, voteCounts] = await activeContract.getOptions(i)
+        
+        proposalList.push({
+          id: i,
+          description,
+          creator,
+          isActive,
+          createdAt: Number(createdAt),
+          hasVoted,
+          options: optionNames.map((name, idx) => ({
+            name,
+            voteCount: Number(voteCounts[idx])
+          }))
+        })
       }
-    }, 5000) // 2초 디바운싱
+
+      setProposals(proposalList)
+      console.log('✅ 제안 데이터 로드 완료')
+    } catch (error) {
+      console.error('❌ 제안 로드 오류:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const createProposal = async () => {
